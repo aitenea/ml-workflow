@@ -11,5 +11,5 @@ setup(
     author_email='david.quesada@aitenea.es',
     description='Python package for training and prediction in machine learning workflows.',
     long_description=open('README.txt').read(),
-    install_requires=['pandas', 'numpy', 'rdkit', 'pubchempy', 'scikit-learn', 'tqdm']
+    install_requires=['pandas', 'numpy', 'rdkit', 'pubchempy', 'scikit-learn', 'tqdm', 'matplotlib']
 )
