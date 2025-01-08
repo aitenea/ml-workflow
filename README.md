@@ -6,5 +6,5 @@ Python package for training and prediction in machine learning workflows. This p
 One can install this package with pip:
 
 ```console
-pip install ml-workflow@git+https://github.com/aitenea/ml-workflow
+pip install mlworkflow@git+https://github.com/aitenea/ml-workflow
 ```
