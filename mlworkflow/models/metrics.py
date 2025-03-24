@@ -1,5 +1,7 @@
 from sklearn.metrics import (mean_squared_error, mean_absolute_error,
-                             mean_absolute_percentage_error, r2_score, accuracy_score)
+                             mean_absolute_percentage_error, r2_score,
+                             accuracy_score, f1_score)
+from sklearn.preprocessing import LabelEncoder
 from numpy import sqrt, mean, std, array, arange
 from mlworkflow.sanitation import check_strs, is_real_valued
 from mlworkflow.utils import print_cond
@@ -26,10 +28,15 @@ class Metrics:
 
         self.cat_ops = {
             'acc': (lambda orig, pred: accuracy_score(orig, pred)),
+            '1_minus_acc': (lambda orig, pred: 1.0 - accuracy_score(orig, pred)),
+            'f1': (lambda orig, pred: f1_score(orig, pred)),
+            '1_minus_f1': (lambda orig, pred: 1.0 - f1_score(orig, pred)),
+            'r2': (lambda orig, pred: r2_score(orig, pred))
         }
 
         self.default_cont = default_cont
         self.default_cat = default_cat
+        self.le = LabelEncoder()
         self.plot_res = plot_res
 
     @staticmethod
@@ -61,6 +68,8 @@ class Metrics:
                 self.__check_metric(op.lower(), self.cont_ops)
             res = self.cont_ops[op.lower()](orig, pred)
         else:
+            orig = self.le.fit_transform(orig.ravel())
+            pred = self.le.fit_transform(pred.ravel())
             if op is None:
                 op = self.default_cat
             else:

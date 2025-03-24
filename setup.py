@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='mlworkflow',
-    version='0.2.5',
+    version='0.2.6',
     packages=['mlworkflow', 'mlworkflow.test', 'mlworkflow.models'],
     scripts=[],
     url='https://github.com/aitenea/ml-workflow/tree/main',
