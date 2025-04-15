@@ -12,7 +12,7 @@ class GeneticVarSel:
     The algorithm uses cross-validation to test the different feature sets.
     """
     def __init__(self, model, metrics, components=[], max_features=20, max_it=50, n_inds=20,
-                 per_cross=0.5, per_mut=0.05):
+                 per_cross=0.5, per_mut=0.05, seed=None):
         check_model(model)
         check_metrics(metrics)
 
@@ -25,7 +25,7 @@ class GeneticVarSel:
         self.n_inds = n_inds
         self.per_cross = per_cross
         self.per_mut = per_mut
-        self.rng = np.random.default_rng()  # Seed in here?
+        self.rng = np.random.default_rng(seed=seed)
         self.best_set = None
         self.features = None
         self.inds = None
