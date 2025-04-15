@@ -73,10 +73,7 @@ class GeneticVarSel:
             new_inds = self.crossover()
             # Mutation of the new individuals
             self.mutate(new_inds)
-            # Replacement
-            self.replace(new_inds)
-            # Evaluation
-            self.eval_inds(df, obj_var)
+            self.eval_and_replace(new_inds, df, obj_var)
 
         print_cond(print_res, f"Best feature set found: {list(self.features[self.best_set > 0])}")
 
@@ -154,6 +151,28 @@ class GeneticVarSel:
         """
         idx_worst = self.inds_rank[-len(new_inds):]
         self.inds[idx_worst] = new_inds
+
+    def eval_and_replace(self, new_inds, df, obj_var):
+        """
+        Evaluate the new individuals, add them to the population and discard the worst individuals until we have a
+        population of n_inds again.
+        """
+        new_inds = [x for x in new_inds if x.__str__() not in self.seen]  # Discard already seen subsets
+        new_inds_scr = np.array([self.eval_bin_set(df, obj_var, bin_set) for bin_set in new_inds])
+        if self.tabu:
+            for i in new_inds:
+                self.seen.add(i.__str__())
+        self.inds = np.append(self.inds, new_inds)
+        self.inds_scr = np.append(self.inds_scr, new_inds_scr)
+        self.inds_rank = np.argsort(self.inds_scr)
+
+        idx_best = self.inds_rank[0:self.n_inds]  # We select only the n_inds best individuals
+        self.inds = self.inds[idx_best]
+        self.inds_scr = self.inds_scr[idx_best]
+        self.inds_rank = np.argsort(self.inds_scr)
+        if self.inds_scr[self.inds_rank[0]] < self.best_err:
+            self.best_err = self.inds_scr[self.inds_rank[0]]
+            self.best_set = self.inds[self.inds_rank[0]]
 
     def eval_inds(self, df, obj_var):
         """
