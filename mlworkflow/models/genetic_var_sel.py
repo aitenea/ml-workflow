@@ -23,7 +23,7 @@ class GeneticVarSel:
         self.metrics = metrics
         self.best_err = float('inf')
         self.components = components
-        self.max_features = max_features
+        self.max_features = max_features  # Currently unused
         self.max_it = max_it
         self.n_inds = n_inds
         self.per_cross = per_cross
@@ -60,11 +60,13 @@ class GeneticVarSel:
 
         # Initialize
         self.features = df.drop(obj_var, axis='columns').columns
+        self.seen.add(self.translate([]).__str__())  # Avoid an empty feature set
         self.initialize_pop()
         self.eval_inds(df, obj_var)
         if len(ini_feat) > 0:
-            self.insert_initial_inds(ini_feat)
-            self.eval_inds(df, obj_var)
+            ini_ind = [self.translate(ini_feat)]
+            #self.insert_initial_inds(ini_feat)
+            self.eval_and_replace(ini_ind, df, obj_var)
 
         for _ in tqdm(range(self.max_it)):
             print_cond(print_res, f"\nCurrent feature set: {list(self.features[self.best_set > 0])}")
@@ -73,6 +75,7 @@ class GeneticVarSel:
             new_inds = self.crossover()
             # Mutation of the new individuals
             self.mutate(new_inds)
+            # Evaluation and replacement of new individuals
             self.eval_and_replace(new_inds, df, obj_var)
 
         print_cond(print_res, f"Best feature set found: {list(self.features[self.best_set > 0])}")
@@ -114,7 +117,7 @@ class GeneticVarSel:
         n_new_inds += n_new_inds % 2  # You always get 2 offspring, so the number of new individuals should be even
         new_inds = np.empty((n_new_inds, len(self.features)), dtype='int')
         weights = self.inds_scr / sum(self.inds_scr)  # Weights are the scores normalized to sum 1
-        weights = (1 - weights) / sum(1 - weights)  # I need to reverse the probs due to minimizing objective
+        weights = (1 - weights) / sum(1 - weights)  # Reverse the probs to minimizing objective. Best one not really prioritized...
 
         for i in range(0, n_new_inds, 2):
             idx = self.rng.choice(self.n_inds, 2, p=weights, replace=False)
@@ -162,7 +165,7 @@ class GeneticVarSel:
         if self.tabu:
             for i in new_inds:
                 self.seen.add(i.__str__())
-        self.inds = np.append(self.inds, new_inds)
+        self.inds = np.append(self.inds, new_inds, axis=0)
         self.inds_scr = np.append(self.inds_scr, new_inds_scr)
         self.inds_rank = np.argsort(self.inds_scr)
 
