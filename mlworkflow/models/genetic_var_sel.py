@@ -108,20 +108,6 @@ class GeneticVarSel:
 
         return child1, child2
 
-    def one_point_cross_new(self, par1, par2):
-        """
-        Simple random one point crossover between two individuals
-        """
-        point = self.rng.choice(len(par1), 1)[0]
-        h11, h12 = par1.one_point_cut(point)
-        h21, h22 = par2.one_point_cut(point)
-        child1 = self.mol_class(mdict=self.mol_dict, rng=self.rng)
-        child1.join_halves(h11, h22)
-        child2 = self.mol_class(mdict=self.mol_dict, rng=self.rng)
-        child2.join_halves(h21, h12)
-
-        return child1, child2
-
     def crossover(self):
         """
         Simple crossover operation over a percentage of the individuals. The individuals with better score are
