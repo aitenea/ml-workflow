@@ -10,9 +10,12 @@ class GeneticVarSel:
     """
     Genetic algorithm for variable selection. Binary version for adding/removing a variable from the feature set.
     The algorithm uses cross-validation to test the different feature sets.
+    The metric is internally minimized, so the best individuals should be the ones with the lowest possible metric
+    values (for example, the lower the MAE the better). Metrics like the R2 which looks for values closest to 1 should
+    be reversed to make the lowest value the most ideal.
     """
     def __init__(self, model, metrics, components=[], max_features=20, max_it=50, n_inds=20,
-                 per_cross=0.5, per_mut=0.05, seed=None):
+                 per_cross=0.5, per_mut=0.05, seed=None, tabu=True):
         check_model(model)
         check_metrics(metrics)
 
@@ -27,6 +30,8 @@ class GeneticVarSel:
         self.per_mut = per_mut
         self.seed = seed
         self.rng = np.random.default_rng(seed=seed)
+        self.tabu = tabu
+        self.seen = set()
         self.best_set = None
         self.features = None
         self.inds = None
@@ -58,7 +63,6 @@ class GeneticVarSel:
         self.initialize_pop()
         self.eval_inds(df, obj_var)
         if len(ini_feat) > 0:
-            # self.set_features(ini_feat)  # Poor performance
             self.insert_initial_inds(ini_feat)
             self.eval_inds(df, obj_var)
 
@@ -93,19 +97,45 @@ class GeneticVarSel:
         Simple random one point crossover between two individuals
         """
         point = self.rng.choice(len(par1), 1)[0]
-        res = np.concatenate((par1[0:point], par2[point:len(par2)]))
-        return res
+
+        h11 = par1[0:point]
+        h12 = par1[point:]
+        h21 = par2[0:point]
+        h22 = par2[point:]
+
+        child1 = np.concatenate((h11, h22))
+        child2 = np.concatenate((h21, h12))
+
+        return child1, child2
+
+    def one_point_cross_new(self, par1, par2):
+        """
+        Simple random one point crossover between two individuals
+        """
+        point = self.rng.choice(len(par1), 1)[0]
+        h11, h12 = par1.one_point_cut(point)
+        h21, h22 = par2.one_point_cut(point)
+        child1 = self.mol_class(mdict=self.mol_dict, rng=self.rng)
+        child1.join_halves(h11, h22)
+        child2 = self.mol_class(mdict=self.mol_dict, rng=self.rng)
+        child2.join_halves(h21, h12)
+
+        return child1, child2
 
     def crossover(self):
         """
-        Crossover operation over a percentage of the individuals
+        Simple crossover operation over a percentage of the individuals. The individuals with better score are
+        more likely to be crossed with other individuals.
         """
         n_new_inds = round(self.n_inds * self.per_cross)
+        n_new_inds += n_new_inds % 2  # You always get 2 offspring, so the number of new individuals should be even
         new_inds = np.empty((n_new_inds, len(self.features)), dtype='int')
+        weights = self.inds_scr / sum(self.inds_scr)  # Weights are the scores normalized to sum 1
+        weights = (1 - weights) / sum(1 - weights)  # I need to reverse the probs due to minimizing objective
 
-        for i in range(n_new_inds):
-            idx = self.rng.choice(self.n_inds, 2, replace=False)
-            new_inds[i] = self.one_point_cross(self.inds[idx[0]], self.inds[idx[1]])
+        for i in range(0, n_new_inds, 2):
+            idx = self.rng.choice(self.n_inds, 2, p=weights, replace=False)
+            new_inds[i], new_inds[i + 1] = self.one_point_cross(self.inds[idx[0]], self.inds[idx[1]])
 
         return new_inds
 
@@ -144,7 +174,10 @@ class GeneticVarSel:
         Evaluate all individuals in the current population
         """
         self.inds_scr = np.array([self.eval_bin_set(df, obj_var, bin_set) for bin_set in self.inds])
-        self.inds_rank = np.argsort(self.inds_scr)
+        if self.tabu:
+            for i in self.inds:
+                self.seen.add(i.__str__())
+        self.inds_rank = np.argsort(self.inds_scr)  # Low to high, 0 is the smallest
         if self.inds_scr[self.inds_rank[0]] < self.best_err:
             self.best_err = self.inds_scr[self.inds_rank[0]]
             self.best_set = self.inds[self.inds_rank[0]]
@@ -165,7 +198,7 @@ class GeneticVarSel:
         return err
 
     def translate(self, feat_set):
-        return np.in1d(self.features, feat_set).astype(int)
+        return np.isin(self.features, feat_set).astype(int)
 
     def set_features(self, ini_feat):
         """
@@ -174,12 +207,11 @@ class GeneticVarSel:
         mask = self.translate(ini_feat)
         self.inds = np.bitwise_or(self.inds, mask)
 
-    def insert_initial_inds(self, ini_feat, n=4):
+    def insert_initial_inds(self, ini_feat):
         """
         Insert n individuals with the initial feature set proposed into the population
         """
-        ind = self.translate(ini_feat)
-        new_inds = np.stack([ind]*n)
-        self.replace(new_inds)
+        ind = [self.translate(ini_feat)]
+        self.replace(ind)
 
 
