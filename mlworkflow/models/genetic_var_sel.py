@@ -25,6 +25,7 @@ class GeneticVarSel:
         self.n_inds = n_inds
         self.per_cross = per_cross
         self.per_mut = per_mut
+        self.seed = seed
         self.rng = np.random.default_rng(seed=seed)
         self.best_set = None
         self.features = None
@@ -35,7 +36,7 @@ class GeneticVarSel:
         self.shuffle = None
         self.seed = None
 
-    def run(self, df, obj_var, ini_feat=[], folds=5, shuffle=False, seed=None, print_res=True):
+    def run(self, df, obj_var, ini_feat=[], folds=5, shuffle=False, print_res=True):
         """
         Run the search algorithm to find the best variable set possible and its error
         :param df: the pandas dataframe with the data
@@ -43,8 +44,6 @@ class GeneticVarSel:
         :param ini_feat: a list with the names of the initial set of variables. Default to empty list
         :param folds: number of folds for the cross-validation
         :param shuffle: whether to shuffle the instances during the folding or not.
-        This transforms the algorithm into a non-deterministic one if set to True.
-        :param seed: the seed for the random state if shuffle is set to True
         :param print_res: boolean that defines whether to print the results
         :return: the obtained best feature set and its error
         """
@@ -53,7 +52,6 @@ class GeneticVarSel:
         check_vars(df, obj_var)
         self.folds = folds
         self.shuffle = shuffle
-        self.seed = seed
 
         # Initialize
         self.features = df.drop(obj_var, axis='columns').columns
