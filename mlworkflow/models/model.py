@@ -80,7 +80,7 @@ class Model(ABC):
         return score, preds
 
     def eval_cv(self, df, obj_var, feature_var, metrics, folds=5,
-                shuffle=False, seed=None, splits=None, print_res=True):
+                shuffle=False, seed=None, splits=None, print_res=True, ret_preds=False):
         """
         Run a cross-validation with the model over some data and return the score
         """
@@ -88,7 +88,9 @@ class Model(ABC):
 
         self.obj_var = obj_var
         self.feature_var = feature_var
-        res = []
+        res_score = []
+        orig = []
+        res_preds = []
 
         if splits is None:
             kf = KFold(n_splits=folds, shuffle=shuffle, random_state=seed)
@@ -96,10 +98,16 @@ class Model(ABC):
 
         for i, (train_index, test_index) in enumerate(splits):
             print_cond(print_res, f"Fold {i}")
-            score, _ = self.eval_data(df, train_index, test_index, metrics, print_res=print_res)
-            res.append(score)
+            score, preds = self.eval_data(df, train_index, test_index, metrics, print_res=print_res)
+            res_score.append(score)
+            orig = orig + list(df.iloc[test_index][obj_var].values.flatten())
+            res_preds = res_preds + list(preds)
 
-        return mean(res)
+        res = mean(res_score)
+        if ret_preds:
+            res = (res, (orig, res_preds))
+
+        return res
 
     def eval_loo(self, df, obj_var, feature_var, metrics, compounds, params=[], print_res=True, plot_res=True):
         """
