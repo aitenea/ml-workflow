@@ -9,7 +9,7 @@ from mlworkflow.utils import print_cond
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
 import matplotlib.pyplot as plt
-from torch import nn
+
 
 import numpy as np
 import re
@@ -439,98 +439,3 @@ class GaussianProcessModel(Model):
         """
         self.length_scale = x[0]
         self.length_scale_bounds = (x[1], x[2])
-
-
-class SLP(nn.Module):
-    def __init__(self, len_in, n):
-        super().__init__()
-        # self.flatten = nn.Flatten()
-        self.linear_relu_stack = nn.Sequential(
-            nn.Linear(len_in, n),
-            nn.ReLU(),
-            nn.Linear(n, 1),
-        )
-
-    def forward(self, x):
-        #x = self.flatten(x)
-        logits = self.linear_relu_stack(x)
-        return logits
-
-class SLPModel(Model):
-    """
-    Class for a single layer perceptron regression model that uses pandas dataframes as input
-    """
-
-    def __init__(self, model=SVR, components=[MinMaxScaler()], restrict=False, kernel='poly', degree=3,
-                 gamma='scale', coef0=0.0, C=1.0, epsilon=0.1):
-        Model.__init__(self, model, components, restrict)
-        self.kernel = kernel
-        self.degree = degree
-        self.gamma = gamma
-        self.coef0 = coef0
-        self.C = C
-        self.epsilon = epsilon
-
-    def fit(self, df, obj_var, feature_var, split=False, print_res=True):
-        """
-        Fit the support vector regression model to the data inside df for the objective variable obj_var using the
-        feature variables feature_var
-        :param df: the pandas dataframe with the data
-        :param obj_var: a list with the name of the objective variable
-        :param feature_var: a list with the names of the feature variables
-        :param split: a boolean that determines whether to do a train/test split
-        :param print_res: boolean that defines whether to print the results
-        """
-        self.obj_var = obj_var
-        self.feature_var = feature_var
-        x, y = self.from_pd_to_np(df)
-        self.pipe = make_pipeline(*self.components,
-                                  self.model(kernel=self.kernel, degree=self.degree, gamma=self.gamma,
-                                             coef0=self.coef0, C=self.C, epsilon=self.epsilon))
-        x_train, x_test, y_train, y_test = self.split_data(x, y, split)
-        y_train = y_train.reshape(1, -1)[0]  # The SVR needs a 1d vector instead of a column vector
-        y_test = y_test.reshape(1, -1)[0]
-        self.pipe.fit(x_train, y_train)
-        print_cond(print_res, "Fit score: " + str(self.pipe.score(x_test, y_test)))
-
-        return None
-
-    def predict(self, df):
-        """
-        Predict the values of the instances inside the dataframe df. Can apply all the metrics inside a Metrics object
-        if provided. It can also take a dataframe with no objective variable column, in case we are applying the model
-        to a real problem outside of testing and we want to predict this value.
-        :param df: the pandas dataframe with the data
-        :return: the predicted values inside a numpy array
-        """
-
-        x, _ = self.from_pd_to_np(df, strict=False)
-        res = self.pipe.predict(x)
-
-        if self.restrict:
-            res[res > 100.0] = 100.0
-            res[res < 0.0] = 0.0
-
-        return res
-
-    def feature_imp(self):
-        """
-        Return importance of the features inside the model
-        :return: the coefficients of the model
-        """
-        pass
-        # return self.pipe.steps[1][1].coef_
-
-    def assign_params(self, x):
-        """
-        Assign the parameters of the SVR model with a list of values in the form [degree, gamma, coef0, C, epsilon].
-        The type of kernel is defined when creating the model, not with this function. This function is needed in
-        order to apply parameter optimization
-        :param x: a list of values to be assigned as parameters
-        """
-        self.degree = round(x[0])
-        self.gamma = x[1]
-        self.coef0 = x[2]
-        self.C = x[3]
-        self.epsilon = x[4]
-
