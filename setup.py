@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='mlworkflow',
-    version='0.2.9',
+    version='0.2.10',
     packages=['mlworkflow', 'mlworkflow.test', 'mlworkflow.models'],
     scripts=[],
     url='https://github.com/aitenea/ml-workflow/tree/main',
@@ -11,5 +11,9 @@ setup(
     author_email='david.quesada@aitenea.es',
     description='Python package for training and prediction in machine learning workflows.',
     long_description=open('README.txt').read(),
-    install_requires=['pandas', 'numpy', 'rdkit', 'pubchempy', 'scikit-learn', 'tqdm', 'matplotlib']
-)
+    install_requires=['pandas', 'numpy', 'rdkit', 'pubchempy', 'scikit-learn', 'tqdm', 'matplotlib'],
+    extras_require={
+            "XGBoost": ["xgboost>=2.0.3"],
+            "Torch": ["torch>=2.2.0"],
+        },
+    )
