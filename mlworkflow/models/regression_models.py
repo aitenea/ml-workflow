@@ -6,11 +6,16 @@ from sklearn.svm import SVR
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, PolynomialFeatures
 from sklearn.decomposition import PCA
 from sklearn.pipeline import make_pipeline
+from sklearn.model_selection import train_test_split
 from mlworkflow.utils import print_cond
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
+from sklearn.base import BaseEstimator, _fit_context
+from sklearn.exceptions import NotFittedError
 import matplotlib.pyplot as plt
-from torch import nn
+import copy
+import torch
+from torch import nn, optim
 
 import numpy as np
 import re
@@ -530,19 +535,174 @@ class GaussianProcessModel(Model):
 
 
 class SLP(nn.Module):
-    def __init__(self, len_in, n):
+    def __init__(self, len_in, n_hidden):
         super().__init__()
         # self.flatten = nn.Flatten()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(len_in, n),
+            nn.Linear(len_in, n_hidden),
             nn.ReLU(),
-            nn.Linear(n, 1),
+            nn.Linear(n_hidden, 1),
         )
 
     def forward(self, x):
-        #x = self.flatten(x)
+        # x = self.flatten(x)
         logits = self.linear_relu_stack(x)
         return logits
+
+
+class NNEstimator(BaseEstimator):
+    """
+    Implementation of a neural network in Torch as a sklearn estimator. Same as skorch, but self-coded to understand
+    it better.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Instantiated custom NN model. Likely a SLP or MLP in this implementation.
+    epochs : int, default=100
+        Number of epochs during training
+    batch_size : int, default=64
+        Size of the batches used for training
+    loss_fn : torch.nn.modules.loss._Loss, default=torch.nn.MSELoss
+        Loss function used for the forward pass
+    optimizer : torch.optim.optimizer, default=torch.optim.Adam
+        Optimizer used for fitting the NN
+    lr : float, default=0.0001
+        Learning rate for the optimizer
+
+    Attributes
+    ----------
+    is_fitted_ : bool
+        A boolean indicating whether the estimator has been fitted.
+
+    n_features_in_ : int
+        Number of features seen during :term:`fit`.
+
+    feature_names_in_ : ndarray of shape (`n_features_in_`,)
+        Names of features seen during :term:`fit`. Defined only when `X`
+        has feature names that are all strings.
+    """
+
+    # This is a dictionary allowing to define the type of parameters.
+    # It used to validate parameter within the `_fit_context` decorator.
+    _parameter_constraints = {
+        "n_hidden": [int],
+        "epoch": [int],
+    }
+
+    def __init__(self, model, epochs=100, batch_size=64, loss_fn=nn.MSELoss, optimizer=optim.Adam, lr=0.0001):
+        self.model = model
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.loss_fn = loss_fn()
+        self.optimizer = optimizer
+        self.lr = lr
+        self.best_loss = None
+        self.best_weights = None
+        self.history = None
+        self.is_fitted_ = False
+
+    @staticmethod
+    def to_tensor(X, y):
+        X = torch.tensor(X, dtype=torch.float32)
+        y = torch.tensor(y, dtype=torch.float32)
+
+        return X, y
+
+    @_fit_context(prefer_skip_nested_validation=True)
+    def fit(self, X, y):
+        """A reference implementation of a fitting function.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix}, shape (n_samples, n_features)
+            The training input samples.
+
+        y : array-like, shape (n_samples,) or (n_samples, n_outputs)
+            The target values (class labels in classification, real numbers in
+            regression).
+
+        Returns
+        -------
+        self : object
+            Returns self.
+        """
+
+        X, y = self._validate_data(X, y, accept_sparse=True)
+
+        # Optimizer
+        optimizer = self.optimizer(self.model.parameters(), lr=self.lr)
+
+        # Hold the best model
+        self.best_loss = np.inf  # init to infinity
+        self.best_weights = None
+        self.history = []
+
+        for epoch in range(self.epochs):
+            # Shuffle the training and test data on each epoch
+            X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.7, shuffle=True)
+            X_train, y_train = self.to_tensor(X_train, y_train)
+            X_test, y_test = self.to_tensor(X_test, y_test)
+
+            batch_start = torch.arange(0, len(X_train), self.batch_size)
+
+            self.model.train()
+            for start in batch_start:
+                # Batch
+                X_batch = X_train[start:start + self.batch_size]
+                y_batch = y_train[start:start + self.batch_size]
+
+                # Forward pass
+                y_pred = self.model(X_batch).flatten()
+                loss = self.loss_fn(y_pred, y_batch)
+
+                # Backpropagation (wrong order? loss -> opt.step -> opt.zero?)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+            # Evaluate loss at end of each epoch
+            self.model.eval()
+            y_pred = self.model(X_test).flatten()
+            eval_loss = float(self.loss_fn(y_pred, y_test))
+
+            self.history.append(eval_loss)
+            if eval_loss < self.best_loss:
+                self.best_loss = eval_loss
+                self.best_weights = copy.deepcopy(self.model.state_dict())
+
+        self.is_fitted_ = True
+        # `fit` should always return `self`
+        return self
+
+    def predict(self, X):
+        """A reference implementation of a predicting function.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix}, shape (n_samples, n_features)
+            The training input samples.
+
+        Returns
+        -------
+        y : ndarray, shape (n_samples,)
+            Returns an array of ones.
+        """
+        # Check if fit had been called
+        if self.is_fitted_:
+            # We need to set reset=False because we don't want to overwrite `n_features_in_`
+            # `feature_names_in_` but only check that the shape is consistent.
+            X = self._validate_data(X, accept_sparse=True, reset=False)
+            X_tensor = torch.tensor(X, dtype=torch.float32)
+
+            self.model.load_state_dict(self.best_weights)
+            self.model.eval()
+            with torch.no_grad():
+                y_pred = self.model(X_tensor).flatten()
+        else:
+            raise NotFittedError("This NNEstimator instance is not fitted yet. Call 'fit' with appropriate arguments before using this estimator.")
+
+        return y_pred.numpy()
 
 
 class SLPModel(Model):
@@ -550,15 +710,16 @@ class SLPModel(Model):
     Class for a single layer perceptron regression model that uses pandas dataframes as input
     """
 
-    def __init__(self, model=SVR, components=[MinMaxScaler()], restrict=False, kernel='poly', degree=3,
-                 gamma='scale', coef0=0.0, C=1.0, epsilon=0.1):
+    def __init__(self, model=NNEstimator, components=[MinMaxScaler()], restrict=False, epochs=100, batch_size=64,
+                 loss_fn=nn.MSELoss, optimizer=optim.Adam, lr=0.0001, n_hidden=42):
         Model.__init__(self, model, components, restrict)
-        self.kernel = kernel
-        self.degree = degree
-        self.gamma = gamma
-        self.coef0 = coef0
-        self.C = C
-        self.epsilon = epsilon
+        self.model = model
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.loss_fn = loss_fn
+        self.optimizer = optimizer
+        self.lr = lr
+        self.n_hidden = n_hidden
 
     def fit(self, df, obj_var, feature_var, split=False, print_res=True):
         """
@@ -574,13 +735,14 @@ class SLPModel(Model):
         self.feature_var = feature_var
         x, y = self.from_pd_to_np(df)
         self.pipe = make_pipeline(*self.components,
-                                  self.model(kernel=self.kernel, degree=self.degree, gamma=self.gamma,
-                                             coef0=self.coef0, C=self.C, epsilon=self.epsilon))
+                                  self.model(SLP(len(self.feature_var), self.n_hidden), epochs=self.epochs,
+                                             batch_size=self.batch_size, loss_fn=self.loss_fn, optimizer=self.optimizer,
+                                             lr=self.lr))
         x_train, x_test, y_train, y_test = self.split_data(x, y, split)
-        y_train = y_train.reshape(1, -1)[0]  # The SVR needs a 1d vector instead of a column vector
+        y_train = y_train.reshape(1, -1)[0]
         y_test = y_test.reshape(1, -1)[0]
         self.pipe.fit(x_train, y_train)
-        print_cond(print_res, "Fit score: " + str(self.pipe.score(x_test, y_test)))
+        #print_cond(print_res, "Fit score: " + str(self.pipe.score(x_test, y_test)))
 
         return None
 
@@ -612,14 +774,8 @@ class SLPModel(Model):
 
     def assign_params(self, x):
         """
-        Assign the parameters of the SVR model with a list of values in the form [degree, gamma, coef0, C, epsilon].
-        The type of kernel is defined when creating the model, not with this function. This function is needed in
-        order to apply parameter optimization
+        TODO: Assign the parameters of the SLP model with a list of values in the form [degree, gamma, coef0, C, epsilon].
         :param x: a list of values to be assigned as parameters
         """
-        self.degree = round(x[0])
-        self.gamma = x[1]
-        self.coef0 = x[2]
-        self.C = x[3]
-        self.epsilon = x[4]
+        pass
 
