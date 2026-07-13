@@ -23,7 +23,8 @@ class Metrics:
             'rmse': (lambda orig, pred: sqrt(mean_squared_error(orig, pred))),
             'mae': (lambda orig, pred: mean_absolute_error(orig, pred)),
             'mape': (lambda orig, pred: mean_absolute_percentage_error(orig, pred)),
-            'r2': (lambda orig, pred: r2_score(orig, pred))
+            'r2': (lambda orig, pred: r2_score(orig, pred)),
+            'r2_inv': (lambda orig, pred: -(r2_score(orig, pred)))
         }
 
         self.cat_ops = {
