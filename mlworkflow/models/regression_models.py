@@ -393,7 +393,7 @@ class SVRModel(Model):
 
     def assign_params(self, x):
         """
-        Assign the parameters of the SVR model with a list of values in the form [gamma, C, epsilon].
+        Assign the parameters of the SVR model with a list of values in the form [C, epsilon].
         The type of kernel is defined when creating the model, not with this function. This function is needed in
         order to apply parameter optimization
         :param x: a list of values to be assigned as parameters
@@ -403,9 +403,9 @@ class SVRModel(Model):
         # self.coef0 = x[2]
         # self.C = x[3]
         # self.epsilon = x[4]
-        self.gamma = x[0]
-        self.C = x[1]
-        self.epsilon = x[2]
+        #self.gamma = x[0]
+        self.C = x[0]
+        self.epsilon = x[1]
         #if x[2] > 0.4:
         #    self.kernel = 'linear'
         #if x[2] > 0.7:
