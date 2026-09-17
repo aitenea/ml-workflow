@@ -18,6 +18,7 @@ class GreedyVarSel:
         self.model = model
         self.metrics = metrics
         self.vars = []
+        self.best_vars = []
         self.best_err = float('inf')
         self.max_features = max_features
         self.force = force
@@ -48,7 +49,8 @@ class GreedyVarSel:
         if len(ini_feat) != 0:
             check_strs(*ini_feat)
             check_vars(df, ini_feat)
-            self.vars = ini_feat
+            self.vars = ini_feat.copy()
+            self.best_vars = ini_feat.copy()
             self.best_err = self.eval_feature(df, obj_var, None)
 
         end = False
@@ -59,14 +61,17 @@ class GreedyVarSel:
             feature, err = self.search_step(df, obj_var)
             print_cond(print_res, f"Best variable found: {feature}, with error {err}")
             if err < self.best_err or self.force:
-                self.best_err = err
                 self.vars.append(feature)
+                if err < self.best_err:
+                    self.best_err = err
+                    self.best_vars = self.vars.copy()
+                
             else:
                 end = True
 
         print_cond(print_res, f"Best feature set found: {self.vars}")
 
-        return self.vars, self.best_err
+        return self.best_vars, self.best_err
 
     def to_str(self):
         return 'Greedy algorithm characteristics:\n' + str(self.__dict__)
@@ -141,7 +146,8 @@ class BackwardsGreedyVarSel(GreedyVarSel):
         if len(ini_feat) != 0:
             check_strs(*ini_feat)
             check_vars(df, ini_feat)
-            self.vars = ini_feat
+            self.vars = ini_feat.copy()
+            self.best_vars = ini_feat.copy()
             self.best_err = self.eval_feature(df, obj_var, None)
         else:
             self.vars = df.columns.difference(obj_var)
@@ -154,14 +160,17 @@ class BackwardsGreedyVarSel(GreedyVarSel):
             feature, err = self.search_step(df, obj_var)
             print_cond(print_res, f"Worst variable found: {feature}, with error {err}")
             if err < self.best_err or self.force:
-                self.best_err = err
                 self.vars = self.vars.difference([feature])
+                if err < self.best_err:
+                    self.best_err = err
+                    self.best_vars = self.vars.copy()
+                
             else:
                 end = True
 
         print_cond(print_res, f"Best feature set found: {self.vars}")
 
-        return self.vars, self.best_err
+        return self.best_vars, self.best_err
 
     def to_str(self):
         return 'Backwards greedy algorithm characteristics:\n' + str(self.__dict__)
@@ -218,6 +227,7 @@ class BeamSearchVarSel:
         self.w = w
         self.b = b
         self.vars = [[] for _ in range(self.w)]
+        self.best_vars = [[] for _ in range(self.w)]
         self.best_err = [float('inf') for _ in range(self.w)]
         self.max_features = max_features
         self.force = force
@@ -267,14 +277,16 @@ class BeamSearchVarSel:
                 tmp = []
                 for feat in features_res:
                     tmp.append(self.vars[feat[2]] + [feat[1]])
-                self.vars = tmp
-                self.best_err = [x[0] for x in features_res]
+                self.vars = tmp.copy()
+                if min(features_res)[0] < min(self.best_err):
+                    self.best_vars = self.vars.copy()
+                    self.best_err = [x[0] for x in features_res]
             else:
                 end = True
 
         print_cond(print_res, f"Best feature set found: {self.vars[0]}")
 
-        return self.vars, self.best_err
+        return self.best_vars, self.best_err
 
     def to_str(self):
         return 'Beam search algorithm characteristics:\n' + str(self.__dict__)
